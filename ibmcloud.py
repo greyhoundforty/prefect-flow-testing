@@ -4,7 +4,6 @@ import ibm_vpc
 from ibm_cloud_sdk_core import ApiException
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from prefect import task, flow
-
 from prefect.blocks.system import Secret
 
 @task(name="Get DTS Credentials from Prefect Secret", log_prints=True)
@@ -20,14 +19,8 @@ def set_iam_authenticator(ibmcloud_api_key):
     )
     return authenticator
 
-
-# dts_credentials = dts_credentials["ibmcloud_api_key"]
-# if not dts_credentials:
-#     raise ValueError("IBM Cloud API key environment variable not found")
-
 @task(name="Get VPC regions", log_prints=True)
 def get_regions(authenticator):
-    # use us-south endpoint to look up all regions
     service = ibm_vpc.VpcV1(authenticator=authenticator)
     service.set_service_url(f'https://us-south.iaas.cloud.ibm.com/v1')
     response = service.list_regions().get_result()
@@ -41,19 +34,22 @@ def get_regional_vpcs(region, authenticator):
     service.set_service_url(f'https://{region}.iaas.cloud.ibm.com/v1')
     response = service.list_vpcs().get_result()
     vpcs = response['vpcs']
-    return vpcs
+    vpc_count = len(vpcs)
+    return vpc_count
 
 @flow(name="Get All VPCs", log_prints=True)
 def get_all_vpcs():
     ibmcloud_api_key = get_dts_credentials()
     authenticator = set_iam_authenticator(ibmcloud_api_key)
     regions = get_regions(authenticator)
-    all_vpcs = []
+    region_vpc_counts = []
     for region in regions:
-        vpcs = get_regional_vpcs(region, authenticator)
-        all_vpcs.extend(vpcs)
-    return all_vpcs
+        vpc_count = get_regional_vpcs(region, authenticator)
+        region_vpc_counts.append({
+            "region": region,
+            "vpc_count": vpc_count
+        })
+    return json.dumps(region_vpc_counts)
 
 if __name__ == "__main__":
     get_all_vpcs()
-
